@@ -1,52 +1,57 @@
 # Import python packages
 import streamlit as st
-# from snowflake.snowpark.context import get_active_session
 from snowflake.snowpark.functions import col
+import requests
 
-# Write directly to the app
-st.title(f"Customize your smoothie :cup_with_straw:")
-st.write(
-  """choose the fruits you want in custom smoothie!
-  """
-)
+# App title
+st.title("Customize your smoothie 🥤")
+st.write("Choose the fruits you want in your custom smoothie!")
 
+# Snowflake connection
 cnx = st.connection("snowflake")
 session = cnx.session()
 
+# User input
 name_on_order = st.text_input("Name of the smoothie:")
 st.write("The Name of the smoothie will be:", name_on_order)
 
-session = get_active_session()
-my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'))
-# st.dataframe(data=my_dataframe, use_container_width=True)
+# Get fruit options
+fruit_df = (
+    session
+    .table("SMOOTHIES.PUBLIC.FRUIT_OPTIONS")
+    .select(col("FRUIT_NAME"))
+    .to_pandas()
+)
 
+fruit_list = fruit_df["FRUIT_NAME"].tolist()
+
+# Multiselect
 ingredients_list = st.multiselect(
-    'choose upto 5 ingredients:',
-    my_dataframe,
+    "Choose up to 5 ingredients:",
+    fruit_list,
     max_selections=5
 )
 
-if ingredients_list:
-    ingredients_string = ''
+# Insert order
+if ingredients_list and name_on_order:
+    ingredients_string = " ".join(ingredients_list)
 
-    for fruit_chosen in ingredients_list:
-        ingredients_string += fruit_chosen + ' '
+    st.write("Your smoothie ingredients:")
     st.write(ingredients_string)
 
-    my_insert_stmt = f"""
-INSERT INTO smoothies.public.orders (ingredients, name_on_order)
-VALUES ('{ingredients_string}', '{name_on_order}')
-"""
+    insert_stmt = f"""
+        INSERT INTO SMOOTHIES.PUBLIC.ORDERS (INGREDIENTS, NAME_ON_ORDER)
+        VALUES ('{ingredients_string}', '{name_on_order}')
+    """
 
-    # st.write(my_insert_stmt)
-    # st.stop()
+    if st.button("Submit order"):
+        session.sql(insert_stmt).collect()
+        st.success("Your Smoothie is ordered! ✅")
 
-    time_to_insert = st.button('Submit order')
+# External API call
+smoothiefroot_response = requests.get(
+    "https://my.smoothiefroot.com/api/fruit/watermelon"
+)
 
-    if time_to_insert:
-        session.sql(my_insert_stmt).collect()
-        st.success('Your Smoothie is ordered!', icon="✅")
-      
-import requests
-smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/watermelon")
-st.text(smoothiefroot_response)
+st.subheader("Smoothiefroot API response")
+st.json(smoothiefroot_response.json())
